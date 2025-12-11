@@ -1,6 +1,5 @@
 package com.spring.security.service;
 
-import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -19,7 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 public class UserDetailsServices implements UserDetailsService {
 
 	private final UserRepository userRepository;
-	
+
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 		Users user = userRepository.findByUsername(username);
