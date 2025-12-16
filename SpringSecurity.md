@@ -816,3 +816,160 @@ class AuthenticationResponse {
 ```
 
 This completes the tutorial on Spring Security and JWT integration. You now have the building blocks to secure your Spring Boot applications effectively.
+
+## 9. OAuth2 Login with Google
+
+OAuth2 is an authorization framework that enables applications to obtain limited access to user accounts on an HTTP service, such as Google, GitHub, or Facebook. It works by delegating user authentication to the service that hosts the user account and authorizing third-party applications to access the user account.
+
+Spring Security provides excellent support for OAuth2 login, making it easy to integrate social login into your application.
+
+### How OAuth2 Login Works
+
+The flow for OAuth2 login (specifically, the "Authorization Code" grant type) is as follows:
+
+1. A user clicks a "Login with Google" button in your application.
+2. The application redirects the user to Google's authorization server.
+3. The user logs into their Google account (if not already logged in) and grants your application permission to access their basic information (like email and profile).
+4. Google's authorization server redirects the user back to your application with an "authorization code".
+5. Your application sends this authorization code to Google's token endpoint, along with its client ID and client secret.
+6. Google verifies the code and returns an "access token".
+7. Your application can now use this access token to request user information (e.g., from the `/userinfo` endpoint).
+8. Spring Security creates a `SecurityContext` for the user, and they are now authenticated in your application.
+
+### Steps to Configure Google Cloud for OAuth2
+
+Before you can use Google Login, you need to register your application with Google and get API credentials.
+
+**Step 1: Go to Google Cloud Console**
+
+Navigate to the [Google Cloud Console](https://console.cloud.google.com/).
+
+**Step 2: Create a New Project**
+
+If you don't have a project, create one. Click the project dropdown in the top navigation bar and click "New Project". Give it a name and click "Create".
+
+**Step 3: Configure the OAuth Consent Screen**
+
+This is what users will see when they are asked to grant permission to your application.
+
+1. In the left-hand menu, go to **APIs & Services > OAuth consent screen**.
+2. Choose a **User Type**:
+    * **Internal**: Only for users within your G Suite organization (if you have one).
+    * **External**: For any user with a Google Account. Choose this for public-facing applications. Click **Create**.
+3. **App Information**:
+    * **App name**: The name of your application.
+    * **User support email**: Your email address for users to contact you.
+    * **Developer contact information**: Your email address.
+    * Fill these in and click **Save and Continue**.
+4. **Scopes**:
+    * Scopes define what information your application can access. For login, you typically need basic information.
+    * Click **Add or Remove Scopes**.
+    * Select the following scopes:
+        * `.../auth/userinfo.email` (to see the user's email address)
+        * `.../auth/userinfo.profile` (to see basic profile info)
+        * `openid` (required for OpenID Connect)
+    * Click **Update**, then **Save and Continue**.
+5. **Test Users**:
+    * While your app is in "testing" mode, only registered test users can log in.
+    * Click **Add Users** and add your own Google account email address.
+    * Click **Save and Continue**.
+6. Review the summary and click **Back to Dashboard**.
+
+**Step 4: Create OAuth 2.0 Client ID**
+
+This is where you will get your `client-id` and `client-secret`.
+
+1. Go to **APIs & Services > Credentials**.
+2. Click **+ Create Credentials** at the top and select **OAuth client ID**.
+3. **Application type**: Choose **Web application**.
+4. **Name**: Give your client ID a name (e.g., "My Spring Boot App").
+5. **Authorized redirect URIs**: This is a critical step. Spring Security's OAuth2 client has a default redirect URI pattern: `{baseUrl}/login/oauth2/code/{registrationId}`.
+    * For Google, the `registrationId` is `google`.
+    * Assuming your application runs on `http://localhost:8080`, the URI will be `http://localhost:8080/login/oauth2/code/google`.
+    * Click **+ Add URI** and enter this value.
+6. Click **Create**.
+7. A dialog will appear with your **Client ID** and **Client Secret**. Copy these values. You will need them for your Spring Boot application. **Treat the Client Secret like a password and never expose it publicly.**
+
+### Integrating OAuth2 Login in Spring Boot
+
+**1. Add Dependency:**
+Add the OAuth2 Client starter to your `pom.xml`.
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-oauth2-client</artifactId>
+</dependency>
+```
+
+**2. Configure `application.properties`:**
+Add your Google credentials to `src/main/resources/application.properties`.
+
+```properties
+spring.security.oauth2.client.registration.google.client-id=YOUR_CLIENT_ID
+spring.security.oauth2.client.registration.google.client-secret=YOUR_CLIENT_SECRET
+spring.security.oauth2.client.registration.google.scope=openid,email,profile
+```
+
+* Replace `YOUR_CLIENT_ID` and `YOUR_CLIENT_SECRET` with the values you got from the Google Cloud Console.
+* The `scope` property tells Spring Security which scopes to request during the authorization flow.
+
+**3. Update Security Configuration:**
+Modify your `SecurityFilterChain` to enable OAuth2 login.
+
+```java
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+
+import static org.springframework.security.config.Customizer.withDefaults;
+
+@Configuration
+@EnableWebSecurity
+public class Oauth2SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeHttpRequests(authorize -> authorize
+                .anyRequest().authenticated()
+            )
+            .oauth2Login(withDefaults()); // Enable OAuth2 login with default settings
+        
+        return http.build();
+    }
+}
+```
+
+The `oauth2Login(withDefaults())` method is a convenient way to enable all the necessary filters and endpoints for the OAuth2 login flow. Spring Boot's auto-configuration will use the properties you defined to set up the Google authentication provider.
+
+**4. Create a Controller to See User Details (Optional):**
+After a successful login, you can access the authenticated user's details.
+
+```java
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class UserController {
+
+    @GetMapping("/")
+    public String home() {
+        return "Welcome! You are not logged in.";
+    }
+
+    @GetMapping("/user")
+    public String user(@AuthenticationPrincipal OAuth2User principal) {
+        // The principal contains user information from the OAuth2 provider
+        String name = principal.getAttribute("name");
+        String email = principal.getAttribute("email");
+        return "Hello, " + name + "! Your email is " + email;
+    }
+}
+```
+
+Now, when you run your application and navigate to `http://localhost:8080/`, Spring Security will redirect you to the default login page, which will include a link to "Login with Google". Clicking it will start the OAuth2 flow you configured. After logging in, you can visit `http://localhost:8080/user` to see your details.

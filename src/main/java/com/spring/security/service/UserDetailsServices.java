@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 public class UserDetailsServices implements UserDetailsService {
 
 	private final UserRepository userRepository;
+	
 
 	@Override
 	public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -27,6 +28,11 @@ public class UserDetailsServices implements UserDetailsService {
 			throw new UsernameNotFoundException("User not found");
 		}
 		return new UserPrincipal(user);
+	}
+
+	public Users registerUser(Users users) {
+		log.info("In service");
+		return userRepository.save(users);
 	}
 
 }
